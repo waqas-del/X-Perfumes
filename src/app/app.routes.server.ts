@@ -14,6 +14,10 @@ export const serverRoutes: ServerRoute[] = [
     }
   },
   {
+    path: 'compare',
+    renderMode: RenderMode.Prerender,
+  },
+  {
     path: '**',
     renderMode: RenderMode.Prerender,
   },

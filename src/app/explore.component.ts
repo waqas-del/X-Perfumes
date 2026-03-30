@@ -22,12 +22,20 @@ import { FormsModule } from '@angular/forms';
               <p class="text-stone-500">Discover our collection of 100 premium impressions.</p>
             </div>
           </div>
-          <button 
-            (click)="goBack()"
-            class="px-4 py-2 rounded-xl border border-stone-300 text-stone-700 font-medium hover:bg-stone-100 transition-colors flex items-center gap-2">
-            <mat-icon>arrow_back</mat-icon>
-            Back to Quiz
-          </button>
+          <div class="flex flex-wrap gap-3">
+            <button 
+              routerLink="/compare"
+              class="px-4 py-2 rounded-xl bg-stone-900 text-white font-medium hover:bg-stone-800 transition-colors flex items-center gap-2">
+              <mat-icon>compare_arrows</mat-icon>
+              Compare
+            </button>
+            <button 
+              (click)="goBack()"
+              class="px-4 py-2 rounded-xl border border-stone-300 text-stone-700 font-medium hover:bg-stone-100 transition-colors flex items-center gap-2">
+              <mat-icon>arrow_back</mat-icon>
+              Back to Quiz
+            </button>
+          </div>
         </div>
 
         <div class="bg-white rounded-2xl shadow-sm border border-stone-200 p-6 mb-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
