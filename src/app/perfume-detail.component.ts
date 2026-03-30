@@ -2,9 +2,8 @@ import { Component, inject, OnInit, signal, PLATFORM_ID } from '@angular/core';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { Title, Meta } from '@angular/platform-browser';
 import { Perfume, PerfumeService } from './perfume.service';
-import { CommonModule, isPlatformBrowser } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
-import { GoogleGenAI, Type } from '@google/genai';
 
 @Component({
   selector: 'app-perfume-detail',
@@ -220,15 +219,9 @@ import { GoogleGenAI, Type } from '@google/genai';
                 <mat-icon class="text-amber-500">auto_awesome</mat-icon>
                 Perfect Pairings
               </h2>
-              @if (isGeneratingPairings()) {
-                <div class="flex items-center gap-2 text-stone-400 text-sm">
-                  <div class="animate-spin h-4 w-4 border-2 border-stone-300 border-t-stone-900 rounded-full"></div>
-                  AI Analyzing...
-                </div>
-              }
             </div>
 
-            <p class="text-stone-500 mb-8 max-w-2xl">Discover scents that complement {{ perfume()?.['Perfume Name'] }}. Our AI analyzes olfactory profiles and personas to find your perfect fragrance layering or rotation partners.</p>
+            <p class="text-stone-500 mb-8 max-w-2xl">Discover scents that complement {{ perfume()?.['Perfume Name'] }}. We've selected these based on complementary olfactory profiles and personas to find your perfect fragrance layering or rotation partners.</p>
 
             @if (pairings().length > 0) {
               <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -243,10 +236,10 @@ import { GoogleGenAI, Type } from '@google/genai';
                   </a>
                 }
               </div>
-            } @else if (!isGeneratingPairings()) {
+            } @else {
               <div class="text-center py-8 text-stone-400">
                 <mat-icon class="text-4xl mb-2 opacity-50">psychology</mat-icon>
-                <p>No pairings suggested yet. Try refreshing.</p>
+                <p>No pairings suggested yet.</p>
               </div>
             }
           </div>
@@ -282,7 +275,6 @@ export class PerfumeDetailComponent implements OnInit {
   compareImpressionPrice = signal<number>(0);
  
   pairings = signal<Perfume[]>([]);
-  isGeneratingPairings = signal<boolean>(false);
  
   ngOnInit() {
     this.route.paramMap.subscribe(params => {
@@ -309,73 +301,46 @@ export class PerfumeDetailComponent implements OnInit {
     }
   }
  
-  async generatePairings(currentPerfume: Perfume) {
-    if (!isPlatformBrowser(this.platformId)) return;
+  generatePairings(currentPerfume: Perfume) {
+    const all = this.allPerfumes();
+    if (all.length === 0) return;
+
+    const currentFamily = currentPerfume['Olfactory Family'];
     
-    this.isGeneratingPairings.set(true);
-    this.pairings.set([]);
- 
-    try {
-      const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-      const model = "gemini-3-flash-preview";
-      
-      const otherPerfumesList = this.allPerfumes()
-        .filter(p => p['Perfume Name'] !== currentPerfume['Perfume Name'])
-        .map(p => ({ Brand: p.Brand, 'Perfume Name': p['Perfume Name'], 'Olfactory Family': p['Olfactory Family'], 'The Perfect Persona': p['The Perfect Persona'] }));
- 
-      const prompt = `
-        You are a master perfumer. Given the perfume:
-        Brand: ${currentPerfume.Brand}
-        Name: ${currentPerfume['Perfume Name']}
-        Family: ${currentPerfume['Olfactory Family']}
-        Persona: ${currentPerfume['The Perfect Persona']}
-        Notes: ${currentPerfume['Key Notes']}
- 
-        Suggest exactly 3 complementary perfumes from the following list that would pair well with it for layering or as a rotation partner. 
-        Focus on complementary olfactory families (e.g., Woody pairs well with Citrus or Spicy) and similar or aspirational personas.
- 
-        List of available perfumes:
-        ${JSON.stringify(otherPerfumesList)}
- 
-        Return ONLY a JSON array of objects with "Brand" and "Perfume Name" properties.
-      `;
- 
-      const response = await ai.models.generateContent({
-        model,
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                Brand: { type: Type.STRING },
-                'Perfume Name': { type: Type.STRING }
-              },
-              required: ['Brand', 'Perfume Name']
-            }
-          }
-        }
-      });
- 
-      const suggestions = JSON.parse(response.text || '[]');
-      const recommendedPerfumes: Perfume[] = [];
- 
-      for (const suggestion of suggestions) {
-        const found = this.allPerfumes().find(p => 
-          p.Brand.toLowerCase() === suggestion.Brand.toLowerCase() && 
-          p['Perfume Name'].toLowerCase() === suggestion['Perfume Name'].toLowerCase()
-        );
-        if (found) recommendedPerfumes.push(found);
-      }
- 
-      this.pairings.set(recommendedPerfumes);
-    } catch (error) {
-      console.error('Error generating pairings:', error);
-    } finally {
-      this.isGeneratingPairings.set(false);
+    // Complementary families mapping
+    const complementaryMap: Record<string, string[]> = {
+      'Floral': ['Woody', 'Citrus', 'Spicy', 'Floral'],
+      'Woody': ['Floral', 'Oriental', 'Citrus', 'Woody'],
+      'Citrus': ['Floral', 'Woody', 'Fresh', 'Citrus'],
+      'Oriental': ['Woody', 'Spicy', 'Floral', 'Oriental'],
+      'Fresh': ['Citrus', 'Floral', 'Aromatic', 'Fresh'],
+      'Spicy': ['Oriental', 'Woody', 'Spicy'],
+      'Aromatic': ['Citrus', 'Woody', 'Aromatic'],
+      'Leather': ['Woody', 'Oriental', 'Leather'],
+      'Chypre': ['Floral', 'Woody', 'Chypre']
+    };
+
+    const targetFamilies = complementaryMap[currentFamily] || [currentFamily];
+
+    // Filter perfumes
+    let candidates = all.filter(p => 
+      p['Perfume Name'] !== currentPerfume['Perfume Name'] &&
+      targetFamilies.some(f => p['Olfactory Family'].includes(f))
+    );
+
+    // If not enough, fallback to same gender
+    if (candidates.length < 3) {
+      const sameGender = all.filter(p => 
+        p['Perfume Name'] !== currentPerfume['Perfume Name'] &&
+        p.Gender === currentPerfume.Gender &&
+        !candidates.includes(p)
+      );
+      candidates = [...candidates, ...sameGender];
     }
+
+    // Shuffle and take 3
+    const shuffled = [...candidates].sort(() => 0.5 - Math.random());
+    this.pairings.set(shuffled.slice(0, 3));
   }
  
   getSlug(perfume: Perfume): string {
