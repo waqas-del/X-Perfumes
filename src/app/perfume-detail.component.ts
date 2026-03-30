@@ -1,9 +1,10 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, inject, OnInit, signal, PLATFORM_ID } from '@angular/core';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { Title, Meta } from '@angular/platform-browser';
 import { Perfume, PerfumeService } from './perfume.service';
-import { CommonModule } from '@angular/common';
+import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
+import { GoogleGenAI, Type } from '@google/genai';
 
 @Component({
   selector: 'app-perfume-detail',
@@ -129,19 +130,30 @@ import { MatIconModule } from '@angular/material/icon';
               <mat-icon>compare_arrows</mat-icon>
               Compare Perfumes
             </h2>
-            <div class="mb-8">
-              <label for="compare-select" class="block text-sm font-medium text-stone-700 mb-2">Select a perfume to compare with {{ perfume()?.['Perfume Name'] }}</label>
-              <select 
-                id="compare-select"
-                class="w-full sm:w-1/2 p-3 rounded-xl border border-stone-300 bg-stone-50 text-stone-900 focus:ring-2 focus:ring-stone-900 focus:border-stone-900 transition-all"
-                (change)="onCompareSelect($event)">
-                <option value="">-- Select a Perfume --</option>
-                @for (p of allPerfumes; track p['Perfume Name']) {
-                  @if (p['Perfume Name'] !== perfume()?.['Perfume Name']) {
-                    <option [value]="getSlug(p)">{{ p.Brand }} - {{ p['Perfume Name'] }}</option>
+            <div class="mb-8 flex flex-col sm:flex-row items-end gap-4">
+              <div class="flex-grow w-full">
+                <label for="compare-select" class="block text-sm font-medium text-stone-700 mb-2">Select a perfume to compare with {{ perfume()?.['Perfume Name'] }}</label>
+                <select 
+                  id="compare-select"
+                  class="w-full p-3 rounded-xl border border-stone-300 bg-stone-50 text-stone-900 focus:ring-2 focus:ring-stone-900 focus:border-stone-900 transition-all"
+                  (change)="onCompareSelect($event)">
+                  <option value="">-- Select a Perfume --</option>
+                  @for (p of allPerfumes(); track p['Perfume Name']) {
+                    @if (p['Perfume Name'] !== perfume()?.['Perfume Name']) {
+                      <option [value]="getSlug(p)">{{ p.Brand }} - {{ p['Perfume Name'] }}</option>
+                    }
                   }
-                }
-              </select>
+                </select>
+              </div>
+              @if (comparePerfume()) {
+                <button 
+                  [routerLink]="['/mix-it']"
+                  [queryParams]="{ p1: getSlug(perfume()!), p2: getSlug(comparePerfume()!) }"
+                  class="w-full sm:w-auto px-6 py-3 rounded-xl bg-amber-600 text-white font-bold uppercase tracking-widest text-xs hover:bg-amber-700 transition-all shadow-lg flex items-center justify-center gap-2 active:scale-95">
+                  <mat-icon>science</mat-icon>
+                  Mix these two
+                </button>
+              }
             </div>
 
             @if (comparePerfume()) {
@@ -200,6 +212,44 @@ import { MatIconModule } from '@angular/material/icon';
               </div>
             }
           </div>
+
+          <!-- Perfect Pairings Section -->
+          <div class="mt-12 bg-white rounded-3xl shadow-sm border border-stone-200 overflow-hidden p-8 sm:p-12">
+            <div class="flex items-center justify-between mb-8">
+              <h2 class="text-2xl font-serif font-medium flex items-center gap-2">
+                <mat-icon class="text-amber-500">auto_awesome</mat-icon>
+                Perfect Pairings
+              </h2>
+              @if (isGeneratingPairings()) {
+                <div class="flex items-center gap-2 text-stone-400 text-sm">
+                  <div class="animate-spin h-4 w-4 border-2 border-stone-300 border-t-stone-900 rounded-full"></div>
+                  AI Analyzing...
+                </div>
+              }
+            </div>
+
+            <p class="text-stone-500 mb-8 max-w-2xl">Discover scents that complement {{ perfume()?.['Perfume Name'] }}. Our AI analyzes olfactory profiles and personas to find your perfect fragrance layering or rotation partners.</p>
+
+            @if (pairings().length > 0) {
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                @for (pair of pairings(); track pair['Perfume Name']) {
+                  <a [routerLink]="['/perfume', getSlug(pair)]" class="group bg-stone-50 rounded-2xl p-6 border border-stone-100 hover:border-stone-900 hover:bg-white transition-all">
+                    <p class="text-[10px] font-medium uppercase tracking-widest text-stone-400 mb-1 group-hover:text-stone-600 transition-colors">{{ pair.Brand }}</p>
+                    <h3 class="text-lg font-serif font-medium text-stone-900 mb-3 group-hover:underline">{{ pair['Perfume Name'] }}</h3>
+                    <div class="flex items-center gap-2 text-xs text-stone-500">
+                      <mat-icon class="text-[14px] w-[14px] h-[14px]">water_drop</mat-icon>
+                      {{ pair['Olfactory Family'] }}
+                    </div>
+                  </a>
+                }
+              </div>
+            } @else if (!isGeneratingPairings()) {
+              <div class="text-center py-8 text-stone-400">
+                <mat-icon class="text-4xl mb-2 opacity-50">psychology</mat-icon>
+                <p>No pairings suggested yet. Try refreshing.</p>
+              </div>
+            }
+          </div>
         } @else {
           <div class="text-center py-20">
             <mat-icon class="text-6xl text-stone-300 mb-4">search_off</mat-icon>
@@ -221,35 +271,117 @@ export class PerfumeDetailComponent implements OnInit {
   private perfumeService = inject(PerfumeService);
   private titleService = inject(Title);
   private metaService = inject(Meta);
-
+  private platformId = inject(PLATFORM_ID);
+ 
   perfume = signal<Perfume | undefined>(undefined);
   impressionPrice = signal<number>(0);
-
+ 
   allPerfumes = this.perfumeService.perfumes;
+  isLoaded = this.perfumeService.isLoaded;
   comparePerfume = signal<Perfume | undefined>(undefined);
   compareImpressionPrice = signal<number>(0);
-
+ 
+  pairings = signal<Perfume[]>([]);
+  isGeneratingPairings = signal<boolean>(false);
+ 
   ngOnInit() {
     this.route.paramMap.subscribe(params => {
       const slug = params.get('slug');
       if (slug) {
-        const found = this.perfumeService.getPerfumeBySlug(slug);
-        if (found) {
-          this.perfume.set(found);
-          this.impressionPrice.set(this.perfumeService.getImpressionPrice(found['Price (AED)']));
-          this.updateSEO(found);
-          // Reset comparison when main perfume changes
-          this.comparePerfume.set(undefined);
-          this.compareImpressionPrice.set(0);
-        }
+        this.loadPerfumeData(slug);
       }
     });
   }
 
+  private async loadPerfumeData(slug: string) {
+    await this.perfumeService.ensureLoaded();
+    const found = this.perfumeService.getPerfumeBySlug(slug);
+    if (found) {
+      this.perfume.set(found);
+      this.impressionPrice.set(this.perfumeService.getImpressionPrice(found['Price (AED)']));
+      this.updateSEO(found);
+      // Reset comparison when main perfume changes
+      this.comparePerfume.set(undefined);
+      this.compareImpressionPrice.set(0);
+      
+      // Generate pairings
+      this.generatePairings(found);
+    }
+  }
+ 
+  async generatePairings(currentPerfume: Perfume) {
+    if (!isPlatformBrowser(this.platformId)) return;
+    
+    this.isGeneratingPairings.set(true);
+    this.pairings.set([]);
+ 
+    try {
+      const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+      const model = "gemini-3-flash-preview";
+      
+      const otherPerfumesList = this.allPerfumes()
+        .filter(p => p['Perfume Name'] !== currentPerfume['Perfume Name'])
+        .map(p => ({ Brand: p.Brand, 'Perfume Name': p['Perfume Name'], 'Olfactory Family': p['Olfactory Family'], 'The Perfect Persona': p['The Perfect Persona'] }));
+ 
+      const prompt = `
+        You are a master perfumer. Given the perfume:
+        Brand: ${currentPerfume.Brand}
+        Name: ${currentPerfume['Perfume Name']}
+        Family: ${currentPerfume['Olfactory Family']}
+        Persona: ${currentPerfume['The Perfect Persona']}
+        Notes: ${currentPerfume['Key Notes']}
+ 
+        Suggest exactly 3 complementary perfumes from the following list that would pair well with it for layering or as a rotation partner. 
+        Focus on complementary olfactory families (e.g., Woody pairs well with Citrus or Spicy) and similar or aspirational personas.
+ 
+        List of available perfumes:
+        ${JSON.stringify(otherPerfumesList)}
+ 
+        Return ONLY a JSON array of objects with "Brand" and "Perfume Name" properties.
+      `;
+ 
+      const response = await ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                Brand: { type: Type.STRING },
+                'Perfume Name': { type: Type.STRING }
+              },
+              required: ['Brand', 'Perfume Name']
+            }
+          }
+        }
+      });
+ 
+      const suggestions = JSON.parse(response.text || '[]');
+      const recommendedPerfumes: Perfume[] = [];
+ 
+      for (const suggestion of suggestions) {
+        const found = this.allPerfumes().find(p => 
+          p.Brand.toLowerCase() === suggestion.Brand.toLowerCase() && 
+          p['Perfume Name'].toLowerCase() === suggestion['Perfume Name'].toLowerCase()
+        );
+        if (found) recommendedPerfumes.push(found);
+      }
+ 
+      this.pairings.set(recommendedPerfumes);
+    } catch (error) {
+      console.error('Error generating pairings:', error);
+    } finally {
+      this.isGeneratingPairings.set(false);
+    }
+  }
+ 
   getSlug(perfume: Perfume): string {
     return this.perfumeService.getSlug(perfume);
   }
-
+ 
   onCompareSelect(event: Event) {
     const selectElement = event.target as HTMLSelectElement;
     const slug = selectElement.value;

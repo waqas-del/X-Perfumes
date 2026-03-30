@@ -29,7 +29,7 @@ import { MatIconModule } from '@angular/material/icon';
           </button>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
           <!-- Perfume 1 Selection -->
           <div class="bg-white rounded-2xl shadow-sm border border-stone-200 p-6">
             <label for="perfume1" class="block text-xs font-bold uppercase tracking-widest text-stone-400 mb-3">First Perfume</label>
@@ -38,7 +38,7 @@ import { MatIconModule } from '@angular/material/icon';
               class="w-full p-3 rounded-xl border border-stone-300 bg-stone-50 text-stone-900 focus:ring-2 focus:ring-stone-900 focus:border-stone-900 transition-all"
               (change)="onSelect1($event)">
               <option value="">-- Select First Perfume --</option>
-              @for (p of allPerfumes; track p['Perfume Name']) {
+              @for (p of allPerfumes(); track p['Perfume Name']) {
                 <option [value]="getSlug(p)">{{ p.Brand }} - {{ p['Perfume Name'] }}</option>
               }
             </select>
@@ -52,12 +52,24 @@ import { MatIconModule } from '@angular/material/icon';
               class="w-full p-3 rounded-xl border border-stone-300 bg-stone-50 text-stone-900 focus:ring-2 focus:ring-stone-900 focus:border-stone-900 transition-all"
               (change)="onSelect2($event)">
               <option value="">-- Select Second Perfume --</option>
-              @for (p of allPerfumes; track p['Perfume Name']) {
+              @for (p of allPerfumes(); track p['Perfume Name']) {
                 <option [value]="getSlug(p)">{{ p.Brand }} - {{ p['Perfume Name'] }}</option>
               }
             </select>
           </div>
         </div>
+
+        @if (perfume1() && perfume2()) {
+          <div class="flex justify-center mb-8">
+            <button 
+              [routerLink]="['/mix-it']"
+              [queryParams]="{ p1: getSlug(perfume1()!), p2: getSlug(perfume2()!) }"
+              class="px-8 py-4 rounded-full bg-amber-600 text-white font-bold uppercase tracking-widest text-sm hover:bg-amber-700 transition-all shadow-lg hover:shadow-xl flex items-center gap-3 active:scale-95">
+              <mat-icon>science</mat-icon>
+              Mix these perfumes
+            </button>
+          </div>
+        }
 
         @if (perfume1() || perfume2()) {
           <div class="bg-white rounded-3xl shadow-sm border border-stone-200 overflow-hidden">

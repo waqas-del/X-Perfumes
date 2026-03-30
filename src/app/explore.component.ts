@@ -24,6 +24,12 @@ import { FormsModule } from '@angular/forms';
           </div>
           <div class="flex flex-wrap gap-3">
             <button 
+              routerLink="/mix-it"
+              class="px-4 py-2 rounded-xl bg-amber-600 text-white font-medium hover:bg-amber-700 transition-colors flex items-center gap-2">
+              <mat-icon>science</mat-icon>
+              Mix IT
+            </button>
+            <button 
               routerLink="/compare"
               class="px-4 py-2 rounded-xl bg-stone-900 text-white font-medium hover:bg-stone-800 transition-colors flex items-center gap-2">
               <mat-icon>compare_arrows</mat-icon>
@@ -94,7 +100,13 @@ import { FormsModule } from '@angular/forms';
           </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        @if (!isLoaded()) {
+          <div class="flex flex-col items-center justify-center py-24 text-stone-400">
+            <mat-icon class="text-5xl mb-4 animate-spin">sync</mat-icon>
+            <p class="text-lg font-serif italic">Loading our collection from Google Sheets...</p>
+          </div>
+        } @else {
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           @for (perfume of filteredPerfumes(); track perfume['Perfume Name']) {
             <div class="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden flex flex-col hover:shadow-md transition-shadow">
               <div class="p-5 flex-grow">
@@ -143,6 +155,7 @@ import { FormsModule } from '@angular/forms';
             </div>
           }
         </div>
+      }
       </div>
     </div>
   `
@@ -152,6 +165,7 @@ export class ExploreComponent {
   private perfumeService = inject(PerfumeService);
   
   allPerfumes = this.perfumeService.perfumes;
+  isLoaded = this.perfumeService.isLoaded;
   
   searchQuery = signal('');
   brandFilter = signal('');
@@ -160,7 +174,7 @@ export class ExploreComponent {
 
   uniqueBrands = computed(() => {
     const brands = new Set<string>();
-    this.allPerfumes.forEach(p => {
+    this.allPerfumes().forEach(p => {
       if (p.Brand) brands.add(p.Brand);
     });
     return Array.from(brands).sort();
@@ -168,7 +182,7 @@ export class ExploreComponent {
 
   uniqueFamilies = computed(() => {
     const families = new Set<string>();
-    this.allPerfumes.forEach(p => {
+    this.allPerfumes().forEach(p => {
       if (p['Olfactory Family']) families.add(p['Olfactory Family']);
     });
     return Array.from(families).sort();
@@ -180,7 +194,7 @@ export class ExploreComponent {
     const gender = this.genderFilter();
     const family = this.familyFilter();
 
-    return this.allPerfumes.filter(p => {
+    return this.allPerfumes().filter(p => {
       const matchQuery = !query || 
         p['Perfume Name'].toLowerCase().includes(query) || 
         p.Brand.toLowerCase().includes(query) || 

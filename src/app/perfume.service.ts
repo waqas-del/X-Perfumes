@@ -1,5 +1,6 @@
-import { Injectable } from '@angular/core';
-import perfumesData from '../assets/perfumes.json';
+import { Injectable, signal, inject } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 
 export interface Perfume {
   'Perfume Name': string;
@@ -32,7 +33,71 @@ export interface QuizAnswers {
   providedIn: 'root'
 })
 export class PerfumeService {
-  perfumes: Perfume[] = perfumesData as Perfume[];
+  private http = inject(HttpClient);
+  private csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQebZrIOwelNa9ALpM83N50gjelGwa1PJe0Zq9Ni8lgR9h5qOMQok7AZ2WabmPoaitcvoC8OVkLXtpy/pub?output=csv';
+
+  perfumes = signal<Perfume[]>([]);
+  isLoaded = signal<boolean>(false);
+  private loadPromise: Promise<void>;
+
+  constructor() {
+    this.loadPromise = this.loadPerfumes();
+  }
+
+  async ensureLoaded() {
+    return this.loadPromise;
+  }
+
+  async loadPerfumes() {
+    try {
+      const csvData = await firstValueFrom(this.http.get(this.csvUrl, { responseType: 'text' }));
+      const parsed = this.parseCSV(csvData);
+      this.perfumes.set(parsed);
+      this.isLoaded.set(true);
+    } catch (error) {
+      console.error('Error loading perfumes from Google Sheets:', error);
+      // Fallback or handle error
+    }
+  }
+
+  private parseCSV(csv: string): Perfume[] {
+    const lines = csv.split(/\r?\n/);
+    if (lines.length === 0) return [];
+
+    const headers = this.parseCSVLine(lines[0]);
+    const perfumes: Perfume[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      const values = this.parseCSVLine(lines[i]);
+      const perfume: Record<string, string> = {};
+      headers.forEach((header, index) => {
+        const key = header.trim().replace(/^"|"$/g, '');
+        const val = values[index]?.trim().replace(/^"|"$/g, '') || '';
+        perfume[key] = val;
+      });
+      perfumes.push(perfume as unknown as Perfume);
+    }
+    return perfumes;
+  }
+
+  private parseCSVLine(line: string): string[] {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    for (const char of line) {
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        result.push(current);
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    result.push(current);
+    return result;
+  }
 
   getSlug(perfume: Perfume): string {
     const base = `${perfume.Brand} ${perfume['Perfume Name']}`;
@@ -40,7 +105,7 @@ export class PerfumeService {
   }
 
   getPerfumeBySlug(slug: string): Perfume | undefined {
-    return this.perfumes.find(p => this.getSlug(p) === slug);
+    return this.perfumes().find(p => this.getSlug(p) === slug);
   }
 
   getImpressionPrice(originalPriceStr: string): number {
@@ -54,20 +119,20 @@ export class PerfumeService {
   }
 
   getRecommendations(answers: QuizAnswers): Perfume[] {
-    const scoredPerfumes = this.perfumes.map(perfume => {
+    const scoredPerfumes = this.perfumes().map(perfume => {
       let score = 0;
 
       // 1. Gender
-      const pGender = perfume.Gender.toLowerCase();
-      const aGender = answers.gender.toLowerCase();
+      const pGender = (perfume.Gender || '').toLowerCase();
+      const aGender = (answers.gender || '').toLowerCase();
       if (aGender === 'him' && (pGender === 'male' || pGender === 'unisex')) score += 10;
       else if (aGender === 'her' && (pGender === 'female' || pGender === 'unisex')) score += 10;
       else if (aGender === 'unisex' && pGender === 'unisex') score += 10;
       else if (aGender === 'unisex') score += 5;
 
       // 2. Profession (map to persona/occasion keywords)
-      const persona = perfume['The Perfect Persona'].toLowerCase();
-      const occasion = perfume['Best Occasion'].toLowerCase();
+      const persona = (perfume['The Perfect Persona'] || '').toLowerCase();
+      const occasion = (perfume['Best Occasion'] || '').toLowerCase();
       const prof = answers.profession;
       if (prof === 'Corporate / Office' && (persona.includes('professional') || persona.includes('leader') || persona.includes('executive') || occasion.includes('office') || occasion.includes('business'))) score += 5;
       if (prof === 'Creative / Artistic' && (persona.includes('artistic') || persona.includes('creative') || persona.includes('unique'))) score += 5;
@@ -84,8 +149,8 @@ export class PerfumeService {
       if (occ === 'Casual / Weekends' && (occasion.includes('casual') || occasion.includes('weekend') || occasion.includes('gym'))) score += 5;
 
       // 4. Type
-      const family = perfume['Olfactory Family'].toLowerCase();
-      const notes = perfume['Key Notes'].toLowerCase();
+      const family = (perfume['Olfactory Family'] || '').toLowerCase();
+      const notes = (perfume['Key Notes'] || '').toLowerCase();
       const type = answers.type;
       if (type === 'Fresh / Citrus / Aquatic' && (family.includes('fresh') || family.includes('citrus') || family.includes('aquatic') || notes.includes('lemon') || notes.includes('bergamot') || notes.includes('sea'))) score += 5;
       if (type === 'Woody / Spicy' && (family.includes('woody') || family.includes('spicy') || notes.includes('cedar') || notes.includes('vetiver') || notes.includes('pepper') || notes.includes('cardamom'))) score += 5;
@@ -94,7 +159,7 @@ export class PerfumeService {
       if (type === 'Leather / Oud / Smoky' && (family.includes('leather') || family.includes('oud') || family.includes('smoky') || notes.includes('leather') || notes.includes('oud') || notes.includes('incense') || notes.includes('tobacco'))) score += 5;
 
       // 5. Season
-      const wear = perfume['When to Wear'].toLowerCase();
+      const wear = (perfume['When to Wear'] || '').toLowerCase();
       const season = answers.season;
       if (season === 'Summer / Spring' && (wear.includes('summer') || wear.includes('spring') || wear.includes('all seasons'))) score += 5;
       if (season === 'Winter / Autumn' && (wear.includes('winter') || wear.includes('autumn') || wear.includes('fall') || wear.includes('all seasons'))) score += 5;

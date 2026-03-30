@@ -8,13 +8,18 @@ export const serverRoutes: ServerRoute[] = [
     renderMode: RenderMode.Prerender,
     async getPrerenderParams() {
       const perfumeService = inject(PerfumeService);
-      return perfumeService.perfumes.map(p => ({
+      await perfumeService.ensureLoaded();
+      return perfumeService.perfumes().map(p => ({
         slug: perfumeService.getSlug(p)
       }));
     }
   },
   {
     path: 'compare',
+    renderMode: RenderMode.Prerender,
+  },
+  {
+    path: 'mix-it',
     renderMode: RenderMode.Prerender,
   },
   {

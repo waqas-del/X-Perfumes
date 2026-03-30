@@ -105,8 +105,9 @@ export class ResultsComponent implements OnInit {
   
   recommendations = signal<Perfume[]>([]);
 
-  ngOnInit() {
+  async ngOnInit() {
     if (isPlatformBrowser(this.platformId)) {
+      await this.perfumeService.ensureLoaded();
       const savedAnswers = localStorage.getItem('quizAnswers');
       if (savedAnswers) {
         const answers: QuizAnswers = JSON.parse(savedAnswers);
